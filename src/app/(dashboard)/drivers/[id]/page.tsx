@@ -1,8 +1,7 @@
 import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { drivers } from '@/data'
-import { DriverDetail } from '@/features/drivers/driver-detail'
-import { DriverPerformance } from '@/features/drivers/driver-performance'
+import { DriverDetailContent } from './driver-detail-wrapper'
 
 interface Props {
   params: Promise<{ id: string }>
@@ -22,10 +21,5 @@ export default async function DriverDetailPage({ params }: Props) {
   const driver = drivers.find(d => d.id === id)
   if (!driver) notFound()
 
-  return (
-    <div className="space-y-6">
-      <DriverDetail driver={driver} />
-      <DriverPerformance driver={driver} />
-    </div>
-  )
+  return <DriverDetailContent driver={driver} />
 }
