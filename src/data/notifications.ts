@@ -62,44 +62,67 @@ function randBetween(min: number, max: number, idx: number): number {
 
 const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-export const notifications: Notification[] = [];
+let _loaded = false;
+const _notifications: Notification[] = [];
 
-const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
-const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
+function load(): void {
+  if (_loaded) return;
+  _loaded = true;
 
-for (let i = 0; i < 200; i++) {
-  const id = `NT-${String(i + 1).padStart(3, '0')}`;
-  const template = pick(notificationTemplates, i * 7);
+  const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
+  const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
 
-  const baseDate = new Date(2024, 0, 1).getTime() + randBetween(0, 550, i * 3) * 86400000;
-  const createdAt = new Date(baseDate + randBetween(0, 12, i * 5) * 3600000).toISOString();
+  for (let i = 0; i < 200; i++) {
+    const id = `NT-${String(i + 1).padStart(3, '0')}`;
+    const template = pick(notificationTemplates, i * 7);
 
-  const read = simpleHash(i * 7) % 100 >= 40;
-  const priority = pick(['low', 'low', 'medium', 'medium', 'high', 'critical'] as Notification['priority'][], i * 11);
+    const baseDate = new Date(2024, 0, 1).getTime() + randBetween(0, 550, i * 3) * 86400000;
+    const createdAt = new Date(baseDate + randBetween(0, 12, i * 5) * 3600000).toISOString();
 
-  let vehicleId: string | undefined;
-  let driverId: string | undefined;
+    const read = simpleHash(i * 7) % 100 >= 40;
+    const priority = pick(['low', 'low', 'medium', 'medium', 'high', 'critical'] as Notification['priority'][], i * 11);
 
-  if (template.needsVehicle) vehicleId = pick(vehicleIds, i * 17);
-  if (template.needsDriver) driverId = pick(driverIds, i * 19);
+    let vehicleId: string | undefined;
+    let driverId: string | undefined;
 
-  const randomDate = `${months[randBetween(0, 11, i * 23)]} ${randBetween(1, 28, i * 29)}`;
-  let message = template.messageTemplate
-    .replace('{vehicle}', vehicleId || '')
-    .replace('{driver}', driverId || '')
-    .replace('{date}', randomDate)
-    .replace(/\s+/g, ' ')
-    .trim();
+    if (template.needsVehicle) vehicleId = pick(vehicleIds, i * 17);
+    if (template.needsDriver) driverId = pick(driverIds, i * 19);
 
-  notifications.push({
-    id,
-    type: template.type,
-    title: template.title,
-    message,
-    priority,
-    read,
-    vehicleId,
-    driverId,
-    createdAt,
-  });
+    const randomDate = `${months[randBetween(0, 11, i * 23)]} ${randBetween(1, 28, i * 29)}`;
+    let message = template.messageTemplate
+      .replace('{vehicle}', vehicleId || '')
+      .replace('{driver}', driverId || '')
+      .replace('{date}', randomDate)
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    _notifications.push({
+      id,
+      type: template.type,
+      title: template.title,
+      message,
+      priority,
+      read,
+      vehicleId,
+      driverId,
+      createdAt,
+    });
+  }
 }
+
+export const notifications: Notification[] = new Proxy(_notifications, {
+  get(_, prop) {
+    load();
+    if (typeof prop === 'string') {
+      const num = parseInt(prop, 10);
+      if (!isNaN(num)) return _notifications[num];
+    }
+    if (prop === Symbol.iterator) return _notifications[Symbol.iterator].bind(_notifications);
+    const val = (_notifications as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof val === 'function' ? (val as Function).bind(_notifications) : val;
+  },
+  has(_, prop) {
+    load();
+    return prop in _notifications;
+  },
+}) as unknown as Notification[];

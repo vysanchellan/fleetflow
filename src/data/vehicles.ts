@@ -70,54 +70,80 @@ function generatePlate(idx: number): string {
   return `${prefix}-${num}`;
 }
 
-export const vehicles: Vehicle[] = [];
-// Maps vehicle index (0-based) to assigned driver ID — used by drivers.ts
 export const vehicleDriverAssignments: Record<string, string> = {};
 
-for (let i = 0; i < 50; i++) {
-  const id = `VH-${String(i + 1).padStart(3, '0')}`;
-  const makeModel = pick(makes, i);
-  const make = makeModel.make;
-  const model = pick(makeModel.models, i + 50);
-  const year = randBetween(2019, 2025, i);
-  const status = pick(statuses, i * 3);
-  const fuelType = pick(fuelTypes, i * 7);
-  const department = pick(departments, i * 11);
-  const mileage = randBetween(5000, 250000, i * 13);
-  const healthScore = randBetween(40, 98, i * 17);
-  const price = 35000 + (simpleHash(i * 19) % 145001);
-  const location = pick(locations, i * 23);
+let _loaded = false;
+const _vehicles: Vehicle[] = [];
 
-  const baseDate = new Date(2020, 0, 1);
-  const createdOffset = randBetween(0, 1800, i * 29);
-  const createdAt = new Date(baseDate.getTime() + createdOffset * 86400000).toISOString();
-  const updatedOffset = randBetween(1, 600, i * 31);
-  const updatedAt = new Date(new Date(createdAt).getTime() + updatedOffset * 86400000).toISOString();
+function load(): void {
+  if (_loaded) return;
+  _loaded = true;
 
-  // Assign a driver to active vehicles
-  let assignedDriverId: string | undefined;
-  if (status === 'active') {
-    const driverIndex = simpleHash(i * 37) % 80;
-    assignedDriverId = `DR-${String(driverIndex + 1).padStart(3, '0')}`;
-    vehicleDriverAssignments[id] = assignedDriverId;
+  for (let i = 0; i < 50; i++) {
+    const id = `VH-${String(i + 1).padStart(3, '0')}`;
+    const makeModel = pick(makes, i);
+    const make = makeModel.make;
+    const model = pick(makeModel.models, i + 50);
+    const year = randBetween(2019, 2025, i);
+    const status = pick(statuses, i * 3);
+    const fuelType = pick(fuelTypes, i * 7);
+    const department = pick(departments, i * 11);
+    const mileage = randBetween(5000, 250000, i * 13);
+    const healthScore = randBetween(40, 98, i * 17);
+    const price = 35000 + (simpleHash(i * 19) % 145001);
+    const location = pick(locations, i * 23);
+
+    const baseDate = new Date(2020, 0, 1);
+    const createdOffset = randBetween(0, 1800, i * 29);
+    const createdAt = new Date(baseDate.getTime() + createdOffset * 86400000).toISOString();
+    const updatedOffset = randBetween(1, 600, i * 31);
+    const updatedAt = new Date(new Date(createdAt).getTime() + updatedOffset * 86400000).toISOString();
+
+    let assignedDriverId: string | undefined;
+    if (status === 'active') {
+      const driverIndex = simpleHash(i * 37) % 80;
+      assignedDriverId = `DR-${String(driverIndex + 1).padStart(3, '0')}`;
+      vehicleDriverAssignments[id] = assignedDriverId;
+    }
+
+    _vehicles.push({
+      id,
+      make,
+      model,
+      year,
+      vin: generateVin(i),
+      plateNumber: generatePlate(i),
+      status,
+      fuelType,
+      mileage,
+      healthScore,
+      price,
+      department,
+      location,
+      assignedDriverId,
+      createdAt,
+      updatedAt,
+    });
   }
-
-  vehicles.push({
-    id,
-    make,
-    model,
-    year,
-    vin: generateVin(i),
-    plateNumber: generatePlate(i),
-    status,
-    fuelType,
-    mileage,
-    healthScore,
-    price,
-    department,
-    location,
-    assignedDriverId,
-    createdAt,
-    updatedAt,
-  });
 }
+
+export function ensureVehiclesLoaded(): void {
+  load();
+}
+
+export const vehicles: Vehicle[] = new Proxy(_vehicles, {
+  get(_, prop) {
+    load();
+    if (typeof prop === 'string') {
+      const num = parseInt(prop, 10);
+      if (!isNaN(num)) return _vehicles[num];
+    }
+    if (prop === Symbol.iterator) return _vehicles[Symbol.iterator].bind(_vehicles);
+    const val = (_vehicles as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof val === 'function' ? (val as Function).bind(_vehicles) : val;
+  },
+  has(_, prop) {
+    load();
+    return prop in _vehicles;
+  },
+}) as unknown as Vehicle[];

@@ -1,5 +1,5 @@
 import type { Driver } from '@/types';
-import { vehicleDriverAssignments } from './vehicles';
+import { vehicleDriverAssignments, ensureVehiclesLoaded } from './vehicles';
 
 const firstNames = [
   'James', 'Maria', 'Carlos', 'Sarah', 'Ahmed', 'Wei', 'Dmitri', 'Fatima', 'Omar', 'Priya',
@@ -57,51 +57,75 @@ function generateLicenseNumber(idx: number): string {
   return s;
 }
 
-// Build reverse map: driverId -> vehicleId
-const driverVehicleAssignments: Record<string, string> = {};
-for (const [vehId, drvId] of Object.entries(vehicleDriverAssignments)) {
-  driverVehicleAssignments[drvId] = vehId;
+let _loaded = false;
+const _drivers: Driver[] = [];
+
+function load(): void {
+  if (_loaded) return;
+  _loaded = true;
+
+  ensureVehiclesLoaded();
+
+  // Build reverse map: driverId -> vehicleId
+  const driverVehicleAssignments: Record<string, string> = {};
+  for (const [vehId, drvId] of Object.entries(vehicleDriverAssignments)) {
+    driverVehicleAssignments[drvId] = vehId;
+  }
+
+  for (let i = 0; i < 80; i++) {
+    const id = `DR-${String(i + 1).padStart(3, '0')}`;
+    const firstName = pick(firstNames, i);
+    const lastName = pick(lastNames, i + 50);
+    const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${simpleHash(i * 37) % 99 + 1}@fleetflow.com`;
+    const phone = `(${200 + (simpleHash(i * 41) % 800)}) ${200 + (simpleHash(i * 43) % 800)}-${1000 + (simpleHash(i * 47) % 9000)}`;
+    const status = pick(statuses, i * 5);
+    const licenseClass = pick(licenseClasses, i * 7);
+    const department = pick(departments, i * 11);
+    const drivingScore = randBetween(55, 100, i * 13);
+    const totalTrips = randBetween(50, 2000, i * 17);
+    const safetyIncidents = randBetween(0, 12, i * 19);
+
+    const hireOffset = randBetween(0, 2500, i * 23);
+    const hireDate = new Date(2018, 0, 1).getTime() + hireOffset * 86400000;
+    const createdAt = new Date(hireDate).toISOString();
+    const updatedAt = new Date(hireDate + randBetween(1, 800, i * 29) * 86400000).toISOString();
+
+    const assignedVehicleId = driverVehicleAssignments[id] || undefined;
+
+    _drivers.push({
+      id,
+      firstName,
+      lastName,
+      email,
+      phone,
+      status,
+      licenseClass,
+      licenseNumber: generateLicenseNumber(i),
+      drivingScore,
+      totalTrips,
+      safetyIncidents,
+      department,
+      assignedVehicleId,
+      hireDate: createdAt,
+      createdAt,
+      updatedAt,
+    });
+  }
 }
 
-export const drivers: Driver[] = [];
-
-for (let i = 0; i < 80; i++) {
-  const id = `DR-${String(i + 1).padStart(3, '0')}`;
-  const firstName = pick(firstNames, i);
-  const lastName = pick(lastNames, i + 50);
-  const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${simpleHash(i * 37) % 99 + 1}@fleetflow.com`;
-  const phone = `(${200 + (simpleHash(i * 41) % 800)}) ${200 + (simpleHash(i * 43) % 800)}-${1000 + (simpleHash(i * 47) % 9000)}`;
-  const status = pick(statuses, i * 5);
-  const licenseClass = pick(licenseClasses, i * 7);
-  const department = pick(departments, i * 11);
-  const drivingScore = randBetween(55, 100, i * 13);
-  const totalTrips = randBetween(50, 2000, i * 17);
-  const safetyIncidents = randBetween(0, 12, i * 19);
-
-  const hireOffset = randBetween(0, 2500, i * 23);
-  const hireDate = new Date(2018, 0, 1).getTime() + hireOffset * 86400000;
-  const createdAt = new Date(hireDate).toISOString();
-  const updatedAt = new Date(hireDate + randBetween(1, 800, i * 29) * 86400000).toISOString();
-
-  // Assign vehicle if this driver has one assigned via vehicleDriverAssignments
-  const assignedVehicleId = driverVehicleAssignments[id] || undefined;
-
-  drivers.push({
-    id,
-    firstName,
-    lastName,
-    email,
-    phone,
-    status,
-    licenseClass,
-    licenseNumber: generateLicenseNumber(i),
-    drivingScore,
-    totalTrips,
-    safetyIncidents,
-    department,
-    assignedVehicleId,
-    hireDate: createdAt,
-    createdAt,
-    updatedAt,
-  });
-}
+export const drivers: Driver[] = new Proxy(_drivers, {
+  get(_, prop) {
+    load();
+    if (typeof prop === 'string') {
+      const num = parseInt(prop, 10);
+      if (!isNaN(num)) return _drivers[num];
+    }
+    if (prop === Symbol.iterator) return _drivers[Symbol.iterator].bind(_drivers);
+    const val = (_drivers as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof val === 'function' ? (val as Function).bind(_drivers) : val;
+  },
+  has(_, prop) {
+    load();
+    return prop in _drivers;
+  },
+}) as unknown as Driver[];

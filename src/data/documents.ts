@@ -68,60 +68,80 @@ function randBetween(min: number, max: number, idx: number): number {
   return min + (simpleHash(idx) % (max - min + 1));
 }
 
-export const documents: Document[] = [];
+let _loaded = false;
+const _documents: Document[] = [];
 
-const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
-const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
+function load(): void {
+  if (_loaded) return;
+  _loaded = true;
 
-// Use configs in order, then cycle with variations
-for (let i = 0; i < 100; i++) {
-  const id = `DC-${String(i + 1).padStart(3, '0')}`;
-  const config = documentConfigs[i % documentConfigs.length];
+  const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
+  const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
 
-  // Vary file type sometimes
-  let fileType: Document['fileType'];
-  if (config.fileName.endsWith('.pdf')) {
-    fileType = simpleHash(i * 7) % 100 < 85 ? 'pdf' : pick(fileTypes, i * 11);
-  } else if (config.fileName.endsWith('.jpg')) {
-    fileType = simpleHash(i * 13) % 100 < 80 ? 'jpg' : pick(['jpg', 'png'] as Document['fileType'][], i * 17);
-  } else {
-    fileType = pick(fileTypes, i * 19);
+  for (let i = 0; i < 100; i++) {
+    const id = `DC-${String(i + 1).padStart(3, '0')}`;
+    const config = documentConfigs[i % documentConfigs.length];
+
+    let fileType: Document['fileType'];
+    if (config.fileName.endsWith('.pdf')) {
+      fileType = simpleHash(i * 7) % 100 < 85 ? 'pdf' : pick(fileTypes, i * 11);
+    } else if (config.fileName.endsWith('.jpg')) {
+      fileType = simpleHash(i * 13) % 100 < 80 ? 'jpg' : pick(['jpg', 'png'] as Document['fileType'][], i * 17);
+    } else {
+      fileType = pick(fileTypes, i * 19);
+    }
+
+    const fileSize = randBetween(50000, 5000000, i * 23);
+
+    let vehicleId: string | undefined;
+    let driverId: string | undefined;
+    if (config.linkVehicle) vehicleId = pick(vehicleIds, i * 29);
+    if (config.linkDriver) driverId = pick(driverIds, i * 31);
+
+    const uploadDate = new Date(2023, 0, 1).getTime() + randBetween(0, 1000, i * 37) * 86400000;
+    const uploadedAt = new Date(uploadDate).toISOString();
+
+    let expiresAt: string | undefined;
+    if (config.hasExpiry) {
+      const expDate = uploadDate + randBetween(180, 730, i * 41) * 86400000;
+      expiresAt = new Date(expDate).toISOString();
+    }
+
+    const suffix = i >= documentConfigs.length ? `_${Math.floor(i / documentConfigs.length) + 1}` : '';
+    const fileNameParts = config.fileName.split('.');
+    const baseName = fileNameParts[0];
+    const ext = fileType === 'pdf' ? 'pdf' : fileType;
+    const fileName = `${baseName}${suffix}.${ext}`;
+
+    _documents.push({
+      id,
+      name: config.name,
+      fileName,
+      fileType,
+      category: config.category,
+      fileSize,
+      tags: config.tags,
+      vehicleId,
+      driverId,
+      uploadedAt,
+      expiresAt,
+    });
   }
-
-  const fileSize = randBetween(50000, 5000000, i * 23);
-
-  let vehicleId: string | undefined;
-  let driverId: string | undefined;
-  if (config.linkVehicle) vehicleId = pick(vehicleIds, i * 29);
-  if (config.linkDriver) driverId = pick(driverIds, i * 31);
-
-  const uploadDate = new Date(2023, 0, 1).getTime() + randBetween(0, 1000, i * 37) * 86400000;
-  const uploadedAt = new Date(uploadDate).toISOString();
-
-  let expiresAt: string | undefined;
-  if (config.hasExpiry) {
-    const expDate = uploadDate + randBetween(180, 730, i * 41) * 86400000;
-    expiresAt = new Date(expDate).toISOString();
-  }
-
-  // Add index-based suffix to make names unique per document
-  const suffix = i >= documentConfigs.length ? `_${Math.floor(i / documentConfigs.length) + 1}` : '';
-  const fileNameParts = config.fileName.split('.');
-  const baseName = fileNameParts[0];
-  const ext = fileType === 'pdf' ? 'pdf' : fileType;
-  const fileName = `${baseName}${suffix}.${ext}`;
-
-  documents.push({
-    id,
-    name: config.name,
-    fileName,
-    fileType,
-    category: config.category,
-    fileSize,
-    tags: config.tags,
-    vehicleId,
-    driverId,
-    uploadedAt,
-    expiresAt,
-  });
 }
+
+export const documents: Document[] = new Proxy(_documents, {
+  get(_, prop) {
+    load();
+    if (typeof prop === 'string') {
+      const num = parseInt(prop, 10);
+      if (!isNaN(num)) return _documents[num];
+    }
+    if (prop === Symbol.iterator) return _documents[Symbol.iterator].bind(_documents);
+    const val = (_documents as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof val === 'function' ? (val as Function).bind(_documents) : val;
+  },
+  has(_, prop) {
+    load();
+    return prop in _documents;
+  },
+}) as unknown as Document[];

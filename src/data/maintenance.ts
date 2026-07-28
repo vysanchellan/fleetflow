@@ -83,67 +83,85 @@ function pickParts(idx: number): string[] {
   return parts;
 }
 
-export const maintenanceRecords: MaintenanceRecord[] = [];
+let _loaded = false;
+const _records: MaintenanceRecord[] = [];
 
-// Pre-compute: vehicle IDs (VH-001 to VH-050) and driver IDs (DR-001 to DR-080)
-// Among vehicles, some are assigned to drivers; we'll pick driver IDs realistically
-const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
-const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
+function load(): void {
+  if (_loaded) return;
+  _loaded = true;
 
-for (let i = 0; i < 300; i++) {
-  const id = `MT-${String(i + 1).padStart(3, '0')}`;
-  const vehicleId = vehicleIds[i % 50];
-  const serviceType = pick(serviceTypes, i * 3);
-  const status = pick(statuses, i * 7);
-  const priority = pick(priorities, i * 11);
-  const cost = randBetween(50, 5000, i * 13);
-  const workshop = pick(workshops, i * 17);
-  const partsReplaced = pickParts(i);
-  const description = `${serviceType} for ${vehicleId}`;
+  const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
+  const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
 
-  // Base date spread across 3 years (2022-2025)
-  const baseDate = new Date(2022, 0, 1).getTime() + randBetween(0, 1100, i * 19) * 86400000;
-  const scheduledDate = new Date(baseDate).toISOString();
-  let completedDate: string | undefined;
-  if (status === 'completed' || status === 'cancelled') {
-    const daysAfter = randBetween(1, 14, i * 23);
-    completedDate = new Date(baseDate + daysAfter * 86400000).toISOString();
+  for (let i = 0; i < 300; i++) {
+    const id = `MT-${String(i + 1).padStart(3, '0')}`;
+    const vehicleId = vehicleIds[i % 50];
+    const serviceType = pick(serviceTypes, i * 3);
+    const status = pick(statuses, i * 7);
+    const priority = pick(priorities, i * 11);
+    const cost = randBetween(50, 5000, i * 13);
+    const workshop = pick(workshops, i * 17);
+    const partsReplaced = pickParts(i);
+    const description = `${serviceType} for ${vehicleId}`;
+
+    const baseDate = new Date(2022, 0, 1).getTime() + randBetween(0, 1100, i * 19) * 86400000;
+    const scheduledDate = new Date(baseDate).toISOString();
+    let completedDate: string | undefined;
+    if (status === 'completed' || status === 'cancelled') {
+      const daysAfter = randBetween(1, 14, i * 23);
+      completedDate = new Date(baseDate + daysAfter * 86400000).toISOString();
+    }
+
+    let driverId: string | undefined;
+    if (simpleHash(i * 29) % 10 < 7) {
+      driverId = pick(driverIds, i * 31);
+    }
+
+    const notes: string | undefined =
+      status === 'completed'
+        ? `All ${serviceType.toLowerCase()} procedures completed successfully. Vehicle returned to service.`
+        : status === 'in_progress'
+          ? `Currently performing ${serviceType.toLowerCase()}. ETA ${randBetween(1, 5, i * 37)} days.`
+          : status === 'pending'
+            ? `Scheduled for ${serviceType.toLowerCase()} at ${workshop}. Awaiting parts.`
+            : undefined;
+
+    const createdAt = new Date(baseDate - randBetween(1, 7, i * 41) * 86400000).toISOString();
+    const updatedAt = completedDate || scheduledDate;
+
+    _records.push({
+      id,
+      vehicleId,
+      driverId,
+      serviceType,
+      description,
+      status,
+      priority,
+      cost,
+      workshop,
+      partsReplaced,
+      scheduledDate,
+      completedDate,
+      notes,
+      createdAt,
+      updatedAt,
+    });
   }
-
-  // Optionally assign a driver
-  let driverId: string | undefined;
-  // ~70% chance of having a driver assigned
-  if (simpleHash(i * 29) % 10 < 7) {
-    driverId = pick(driverIds, i * 31);
-  }
-
-  const notes: string | undefined =
-    status === 'completed'
-      ? `All ${serviceType.toLowerCase()} procedures completed successfully. Vehicle returned to service.`
-      : status === 'in_progress'
-        ? `Currently performing ${serviceType.toLowerCase()}. ETA ${randBetween(1, 5, i * 37)} days.`
-        : status === 'pending'
-          ? `Scheduled for ${serviceType.toLowerCase()} at ${workshop}. Awaiting parts.`
-          : undefined;
-
-  const createdAt = new Date(baseDate - randBetween(1, 7, i * 41) * 86400000).toISOString();
-  const updatedAt = completedDate || scheduledDate;
-
-  maintenanceRecords.push({
-    id,
-    vehicleId,
-    driverId,
-    serviceType,
-    description,
-    status,
-    priority,
-    cost,
-    workshop,
-    partsReplaced,
-    scheduledDate,
-    completedDate,
-    notes,
-    createdAt,
-    updatedAt,
-  });
 }
+
+export const maintenanceRecords: MaintenanceRecord[] = new Proxy(_records, {
+  get(_, prop) {
+    load();
+    if (typeof prop === 'string') {
+      const num = parseInt(prop, 10);
+      if (!isNaN(num)) return _records[num];
+    }
+    if (prop === Symbol.iterator) return _records[Symbol.iterator].bind(_records);
+    const val = (_records as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof val === 'function' ? (val as Function).bind(_records) : val;
+  },
+  has(_, prop) {
+    load();
+    return prop in _records;
+  },
+}) as unknown as MaintenanceRecord[];

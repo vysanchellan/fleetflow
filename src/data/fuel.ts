@@ -36,58 +36,78 @@ function randBetween(min: number, max: number, idx: number): number {
   return min + (simpleHash(idx) % (max - min + 1));
 }
 
-export const fuelLogs: FuelLog[] = [];
+let _loaded = false;
+const _logs: FuelLog[] = [];
 
-const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
-const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
+function load(): void {
+  if (_loaded) return;
+  _loaded = true;
 
-// Track cumulative mileage per vehicle for realistic MPG / trip miles
-const vehicleMileage: Record<string, number> = {};
-for (const vid of vehicleIds) {
-  vehicleMileage[vid] = 5000 + (simpleHash(vid.charCodeAt(3) * 100) % 200000);
-}
+  const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
+  const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
 
-for (let i = 0; i < 600; i++) {
-  const id = `FL-${String(i + 1).padStart(3, '0')}`;
-  const vehicleId = pick(vehicleIds, i * 3);
-
-  // Pick driver — ~80% chance of having a driver
-  let driverId: string | undefined;
-  if (simpleHash(i * 7) % 5 < 4) {
-    driverId = pick(driverIds, i * 11);
+  // Track cumulative mileage per vehicle for realistic MPG / trip miles
+  const vehicleMileage: Record<string, number> = {};
+  for (const vid of vehicleIds) {
+    vehicleMileage[vid] = 5000 + (simpleHash(vid.charCodeAt(3) * 100) % 200000);
   }
 
-  const station = pick(stations, i * 13);
-  const location = pick(locations, i * 17);
-  const fuelType = pick(fuelTypes, i * 19);
+  for (let i = 0; i < 600; i++) {
+    const id = `FL-${String(i + 1).padStart(3, '0')}`;
+    const vehicleId = pick(vehicleIds, i * 3);
 
-  const gallons = parseFloat((15 + (simpleHash(i * 23) % 46) + (simpleHash(i * 29) % 100) / 100).toFixed(2));
-  const pricePerGallon = parseFloat((3.80 + (simpleHash(i * 31) % 270) / 100).toFixed(2));
-  const totalCost = parseFloat((gallons * pricePerGallon).toFixed(2));
+    let driverId: string | undefined;
+    if (simpleHash(i * 7) % 5 < 4) {
+      driverId = pick(driverIds, i * 11);
+    }
 
-  // Trip miles: 100–650, but let the vehicle "travel" cumulatively
-  const tripMiles = randBetween(100, 650, i * 37);
-  vehicleMileage[vehicleId] += tripMiles;
+    const station = pick(stations, i * 13);
+    const location = pick(locations, i * 17);
+    const fuelType = pick(fuelTypes, i * 19);
 
-  const mpg = parseFloat((tripMiles / gallons).toFixed(1));
+    const gallons = parseFloat((15 + (simpleHash(i * 23) % 46) + (simpleHash(i * 29) % 100) / 100).toFixed(2));
+    const pricePerGallon = parseFloat((3.80 + (simpleHash(i * 31) % 270) / 100).toFixed(2));
+    const totalCost = parseFloat((gallons * pricePerGallon).toFixed(2));
 
-  // Spread dates across 2023–2026
-  const baseDate = new Date(2023, 0, 1).getTime() + randBetween(0, 1100, i * 41) * 86400000;
-  const date = new Date(baseDate).toISOString();
-  const createdAt = new Date(baseDate - randBetween(0, 3, i * 43) * 86400000).toISOString();
+    const tripMiles = randBetween(100, 650, i * 37);
+    vehicleMileage[vehicleId] += tripMiles;
 
-  fuelLogs.push({
-    id,
-    vehicleId,
-    driverId,
-    station: `${station} — ${location}`,
-    gallons,
-    pricePerGallon,
-    totalCost,
-    tripMiles,
-    mpg,
-    fuelType,
-    date,
-    createdAt,
-  });
+    const mpg = parseFloat((tripMiles / gallons).toFixed(1));
+
+    const baseDate = new Date(2023, 0, 1).getTime() + randBetween(0, 1100, i * 41) * 86400000;
+    const date = new Date(baseDate).toISOString();
+    const createdAt = new Date(baseDate - randBetween(0, 3, i * 43) * 86400000).toISOString();
+
+    _logs.push({
+      id,
+      vehicleId,
+      driverId,
+      station: `${station} — ${location}`,
+      gallons,
+      pricePerGallon,
+      totalCost,
+      tripMiles,
+      mpg,
+      fuelType,
+      date,
+      createdAt,
+    });
+  }
 }
+
+export const fuelLogs: FuelLog[] = new Proxy(_logs, {
+  get(_, prop) {
+    load();
+    if (typeof prop === 'string') {
+      const num = parseInt(prop, 10);
+      if (!isNaN(num)) return _logs[num];
+    }
+    if (prop === Symbol.iterator) return _logs[Symbol.iterator].bind(_logs);
+    const val = (_logs as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof val === 'function' ? (val as Function).bind(_logs) : val;
+  },
+  has(_, prop) {
+    load();
+    return prop in _logs;
+  },
+}) as unknown as FuelLog[];

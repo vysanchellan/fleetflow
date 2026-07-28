@@ -60,7 +60,6 @@ function generateInspectionItems(idx: number, result: Inspection['result']): Ins
       status = simpleHash(idx * 41 + j * 29) % 2 === 0 ? 'fail' : 'pass';
     }
 
-    // Sprinkle ~85% pass rate with some failures
     if (status === 'pass' && simpleHash(idx * 43 + j * 31) % 100 < 85) {
       status = 'pass';
     } else if (status === 'pass') {
@@ -84,56 +83,77 @@ function generateInspectionItems(idx: number, result: Inspection['result']): Ins
   return items;
 }
 
-export const inspections: Inspection[] = [];
+let _loaded = false;
+const _inspections: Inspection[] = [];
 
-const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
-const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
+function load(): void {
+  if (_loaded) return;
+  _loaded = true;
 
-for (let i = 0; i < 150; i++) {
-  const id = `IN-${String(i + 1).padStart(3, '0')}`;
-  const vehicleId = pick(vehicleIds, i * 3);
-  const type = pick(inspectionTypes, i * 7);
+  const vehicleIds = Array.from({ length: 50 }, (_, i) => `VH-${String(i + 1).padStart(3, '0')}`);
+  const driverIds = Array.from({ length: 80 }, (_, i) => `DR-${String(i + 1).padStart(3, '0')}`);
 
-  // Driver assignment: ~75% have a driver
-  let driverId: string | undefined;
-  if (simpleHash(i * 11) % 4 < 3) {
-    driverId = pick(driverIds, i * 13);
+  for (let i = 0; i < 150; i++) {
+    const id = `IN-${String(i + 1).padStart(3, '0')}`;
+    const vehicleId = pick(vehicleIds, i * 3);
+    const type = pick(inspectionTypes, i * 7);
+
+    let driverId: string | undefined;
+    if (simpleHash(i * 11) % 4 < 3) {
+      driverId = pick(driverIds, i * 13);
+    }
+
+    const resultRoll = simpleHash(i * 17) % 100;
+    let result: Inspection['result'];
+    if (resultRoll < 70) result = 'pass';
+    else if (resultRoll < 90) result = 'conditional';
+    else result = 'fail';
+
+    const inspector = pick(inspectors, i * 19);
+    const items = generateInspectionItems(i, result);
+
+    const baseDate = new Date(2023, 0, 1).getTime() + randBetween(0, 1000, i * 23) * 86400000;
+    const date = new Date(baseDate).toISOString();
+    const createdAt = new Date(baseDate - randBetween(0, 2, i * 29) * 86400000).toISOString();
+    const updatedAt = date;
+
+    let notes: string | undefined;
+    if (result === 'fail') {
+      notes = `Vehicle requires immediate maintenance. ${items.filter(it => it.status === 'fail').length} item(s) failed inspection.`;
+    } else if (result === 'conditional') {
+      const failed = items.filter(it => it.status === 'fail');
+      notes = `Conditional pass. ${failed.length} minor issue(s) found: ${failed.map(f => f.name).join(', ')}. Repair within 7 days.`;
+    }
+
+    _inspections.push({
+      id,
+      vehicleId,
+      driverId,
+      type,
+      result,
+      inspector,
+      items,
+      notes,
+      date,
+      createdAt,
+      updatedAt,
+    });
   }
-
-  // Result distribution ~70% pass, ~20% conditional, ~10% fail
-  const resultRoll = simpleHash(i * 17) % 100;
-  let result: Inspection['result'];
-  if (resultRoll < 70) result = 'pass';
-  else if (resultRoll < 90) result = 'conditional';
-  else result = 'fail';
-
-  const inspector = pick(inspectors, i * 19);
-  const items = generateInspectionItems(i, result);
-
-  const baseDate = new Date(2023, 0, 1).getTime() + randBetween(0, 1000, i * 23) * 86400000;
-  const date = new Date(baseDate).toISOString();
-  const createdAt = new Date(baseDate - randBetween(0, 2, i * 29) * 86400000).toISOString();
-  const updatedAt = date;
-
-  let notes: string | undefined;
-  if (result === 'fail') {
-    notes = `Vehicle requires immediate maintenance. ${items.filter(it => it.status === 'fail').length} item(s) failed inspection.`;
-  } else if (result === 'conditional') {
-    const failed = items.filter(it => it.status === 'fail');
-    notes = `Conditional pass. ${failed.length} minor issue(s) found: ${failed.map(f => f.name).join(', ')}. Repair within 7 days.`;
-  }
-
-  inspections.push({
-    id,
-    vehicleId,
-    driverId,
-    type,
-    result,
-    inspector,
-    items,
-    notes,
-    date,
-    createdAt,
-    updatedAt,
-  });
 }
+
+export const inspections: Inspection[] = new Proxy(_inspections, {
+  get(_, prop) {
+    load();
+    if (typeof prop === 'string') {
+      const num = parseInt(prop, 10);
+      if (!isNaN(num)) return _inspections[num];
+    }
+    if (prop === Symbol.iterator) return _inspections[Symbol.iterator].bind(_inspections);
+    const val = (_inspections as unknown as Record<string | symbol, unknown>)[prop];
+    return typeof val === 'function' ? (val as Function).bind(_inspections) : val;
+  },
+  has(_, prop) {
+    load();
+    return prop in _inspections;
+  },
+}) as unknown as Inspection[];
