@@ -405,7 +405,7 @@ function Nav() {
           </Button>
           <Button
             size="sm"
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push('/login')}
           >
             Get Started
           </Button>
@@ -440,7 +440,7 @@ function Nav() {
           <Button variant="ghost" fullWidth onClick={() => router.push('/login')}>
             Sign In
           </Button>
-          <Button fullWidth onClick={() => router.push('/dashboard')}>
+          <Button fullWidth onClick={() => router.push('/login')}>
             Get Started
           </Button>
         </div>
@@ -513,7 +513,7 @@ function Hero() {
             >
               <Button
                 size="lg"
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push('/login')}
               >
                 Get Started Free
                 <ArrowRight className="w-4 h-4 ml-1" />
@@ -727,7 +727,7 @@ function PricingSection() {
                     if (plan.name === 'Enterprise') {
                       router.push('/login')
                     } else {
-                      router.push('/dashboard')
+                      router.push('/login')
                     }
                   }}
                 >
@@ -770,7 +770,7 @@ function CTASection() {
           >
             <Button
               size="lg"
-              onClick={() => router.push('/dashboard')}
+              onClick={() => router.push('/login')}
             >
               Get Started Free
               <ArrowRight className="w-4 h-4 ml-1" />

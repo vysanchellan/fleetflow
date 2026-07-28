@@ -16,7 +16,7 @@ export default function LoginPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    router.push('/dashboard')
+    router.push('/')
   }
 
   return (
@@ -107,10 +107,28 @@ export default function LoginPage() {
             </Button>
           </form>
 
-          {/* Demo hint */}
-          <div className="mt-6 p-3 rounded-lg bg-neutral-900/50 border border-neutral-800">
-            <p className="text-xs text-neutral-400 text-center">
-              Demo credentials: admin@fleetflow.com / demo
+          {/* Demo login button */}
+          <div className="mt-6 space-y-3">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-neutral-800" />
+              </div>
+              <div className="relative flex justify-center text-xs">
+                <span className="bg-neutral-900 px-2 text-neutral-500">Demo access</span>
+              </div>
+            </div>
+            <Button
+              onClick={() => router.push('/')}
+              variant="outline"
+              fullWidth
+              size="lg"
+              className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10 hover:border-blue-500/50"
+            >
+              <Truck className="w-4 h-4 mr-2" />
+              Launch Demo Dashboard
+            </Button>
+            <p className="text-xs text-neutral-500 text-center">
+              No credentials required — instant access
             </p>
           </div>
         </div>

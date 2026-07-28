@@ -34,7 +34,7 @@ export default function NotFoundPage() {
         <p className="text-neutral-400 mb-8 max-w-md">
           The page you are looking for doesn't exist or has been moved.
         </p>
-        <Button onClick={() => router.push('/dashboard')}>
+        <Button onClick={() => router.push('/')}>
           Back to Dashboard
         </Button>
       </motion.div>
